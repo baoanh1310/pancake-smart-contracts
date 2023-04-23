@@ -1,20 +1,23 @@
+/* eslint-disable no-await-in-loop */
+/* eslint-disable no-restricted-syntax */
 import { parseEther } from "ethers/lib/utils";
 import { artifacts, contract } from "hardhat";
 import { assert, expect } from "chai";
 import { BN, constants, expectEvent, expectRevert, time } from "@openzeppelin/test-helpers";
+import { BigNumber } from "@ethersproject/bignumber";
 
 const MockERC20 = artifacts.require("./utils/MockERC20.sol");
 const MockRandomNumberGenerator = artifacts.require("./utils/MockRandomNumberGenerator.sol");
 const PancakeSwapLottery = artifacts.require("./PancakeSwapLottery.sol");
 
-const PRICE_BNB = 400;
+const PRICE_ETH = 2000;
 
-function gasToBNB(gas: number, gwei: number = 5) {
+function gasToETH(gas: number, gwei = 5) {
   const num = gas * gwei * 10 ** -9;
   return num.toFixed(4);
 }
 
-function gasToUSD(gas: number, gwei: number = 5, priceBNB: number = PRICE_BNB) {
+function gasToUSD(gas: number, gwei = 5, priceBNB: number = PRICE_ETH) {
   const num = gas * priceBNB * gwei * 10 ** -9;
   return num.toFixed(2);
 }
@@ -24,28 +27,29 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
   const _totalInitSupply = parseEther("10000");
 
   let _lengthLottery = new BN("14400"); // 4h
-  let _priceTicketInCake = parseEther("0.5");
+  // const _priceTicketInUSDT = parseEther("0.5");
+  const _priceTicketInUSDT = BigNumber.from("5000000"); // 5 USDT
   let _discountDivisor = "2000";
 
   let _rewardsBreakdown = ["200", "300", "500", "1500", "2500", "5000"];
   let _treasuryFee = "2000";
 
   // Contracts
-  let lottery, mockCake, randomNumberGenerator;
+  let lottery; let mockUSDT; let randomNumberGenerator;
 
   // Generic variables
   let result: any;
   let endTime;
 
   before(async () => {
-    // Deploy MockCake
-    mockCake = await MockERC20.new("Mock CAKE", "CAKE", _totalInitSupply);
+    // Deploy MockUSDT
+    mockUSDT = await MockERC20.new("Mock USDT", "USDT", _totalInitSupply);
 
     // Deploy MockRandomNumberGenerator
     randomNumberGenerator = await MockRandomNumberGenerator.new({ from: alice });
 
     // Deploy PancakeSwapLottery
-    lottery = await PancakeSwapLottery.new(mockCake.address, randomNumberGenerator.address, { from: alice });
+    lottery = await PancakeSwapLottery.new(mockUSDT.address, randomNumberGenerator.address, { from: alice });
 
     await randomNumberGenerator.setLotteryAddress(lottery.address, { from: alice });
   });
@@ -54,16 +58,16 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
     it("Admin sets up treasury/operator address", async () => {
       result = await lottery.setOperatorAndTreasuryAndInjectorAddresses(operator, treasury, injector, { from: alice });
       expectEvent(result, "NewOperatorAndTreasuryAndInjectorAddresses", {
-        operator: operator,
-        treasury: treasury,
-        injector: injector,
+        operator,
+        treasury,
+        injector,
       });
     });
 
-    it("Users mint and approve CAKE to be used in the lottery", async () => {
-      for (let thisUser of [alice, bob, carol, david, erin, injector]) {
-        await mockCake.mintTokens(parseEther("100000"), { from: thisUser });
-        await mockCake.approve(lottery.address, parseEther("100000"), {
+    it("Users mint and approve USDT to be used in the lottery", async () => {
+      for (const thisUser of [alice, bob, carol, david, erin, injector]) {
+        await mockUSDT.mintTokens(parseEther("100000"), { from: thisUser });
+        await mockUSDT.approve(lottery.address, parseEther("100000"), {
           from: thisUser,
         });
       }
@@ -74,7 +78,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
       result = await lottery.startLottery(
         endTime,
-        _priceTicketInCake,
+        _priceTicketInUSDT,
         _discountDivisor,
         _rewardsBreakdown,
         _treasuryFee,
@@ -85,13 +89,13 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         lotteryId: "1",
         startTime: (await time.latest()).toString(),
         endTime: endTime.toString(),
-        priceTicketInCake: _priceTicketInCake.toString(),
+        priceTicketInUSDT: _priceTicketInUSDT.toString(),
         firstTicketId: "0",
         injectedAmount: "0",
       });
 
       console.info(
-        `        --> Cost to start the lottery: ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to start the lottery: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
@@ -206,19 +210,19 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
       expectEvent(result, "TicketsPurchase", { buyer: bob, lotteryId: "1", numberTickets: "100" });
 
       console.info(
-        `        --> Cost to buy the first 100 tickets: ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to buy the first 100 tickets: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
 
-      expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+      expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
         from: bob,
         to: lottery.address,
-        value: parseEther("47.525").toString(),
+        value: BigNumber.from("475250000").toString(),
       });
 
       result = await lottery.viewLottery("1");
-      assert.equal(result[11].toString(), parseEther("47.525").toString());
+      assert.equal(result[11].toString(), BigNumber.from("475250000").toString());
 
       result = await lottery.viewUserInfoForLotteryId(bob, "1", 0, 100);
       const bobTicketIds = [];
@@ -241,15 +245,15 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
       expectEvent(result, "TicketsPurchase", { buyer: carol, lotteryId: "1", numberTickets: "1" });
 
       console.info(
-        `        --> Cost to buy a stand-alone ticket: ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to buy a stand-alone ticket: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
 
-      expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+      expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
         from: carol,
         to: lottery.address,
-        value: parseEther("0.5").toString(),
+        value: BigNumber.from("5000000").toString(),
       });
     });
 
@@ -267,40 +271,40 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         "1999999",
       ];
 
-      const expectedPricePerBatch = await lottery.calculateTotalPriceForBulkTickets("2000", parseEther("0.5"), "10");
+      const expectedPricePerBatch = await lottery.calculateTotalPriceForBulkTickets("2000", BigNumber.from("5000000"), "10");
 
       result = await lottery.buyTickets("1", _ticketsBought, { from: david });
       expectEvent(result, "TicketsPurchase", { buyer: david, lotteryId: "1", numberTickets: "10" });
 
       console.info(
-        `        --> Cost to buy 10 tickets: ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to buy 10 tickets: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
 
-      expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+      expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
         from: david,
         to: lottery.address,
-        value: parseEther("4.9775").toString(),
+        value: BigNumber.from("49775000").toString(),
       });
 
-      assert.equal(expectedPricePerBatch.toString(), parseEther("4.9775").toString());
+      assert.equal(expectedPricePerBatch.toString(), BigNumber.from("49775000").toString());
     });
 
-    it("Owner does 10k CAKE injection", async () => {
-      result = await lottery.injectFunds("1", parseEther("10000"), { from: alice });
-      expectEvent(result, "LotteryInjection", { lotteryId: "1", injectedAmount: parseEther("10000").toString() });
+    it("Owner does 10k USDT injection", async () => {
+      result = await lottery.injectFunds("1", BigNumber.from("10000000000"), { from: alice });
+      expectEvent(result, "LotteryInjection", { lotteryId: "1", injectedAmount: BigNumber.from("10000000000").toString() });
 
       console.info(
-        `        --> Cost to do injection: ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to do injection: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
 
-      expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+      expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
         from: alice,
         to: lottery.address,
-        value: parseEther("10000").toString(),
+        value: BigNumber.from("10000000000").toString(),
       });
     });
 
@@ -314,7 +318,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
       expectEvent(result, "LotteryClose", { lotteryId: "1", firstTicketIdNextLottery: "111" });
 
       console.info(
-        `        --> Cost to close lottery: ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to close lottery: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
@@ -330,42 +334,42 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         countWinningTickets: "11",
       });
 
-      expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+      expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
         from: lottery.address,
         to: treasury,
-        value: parseEther("2010.6005").toString(),
+        value: BigNumber.from("2106005000").toString(),
       });
 
       console.info(
-        `        --> Cost to draw numbers (w/o ChainLink): ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to draw numbers (w/o ChainLink): ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
     });
 
     it("David claims the jackpot", async () => {
-      // 10,000 + 47.525 + 0.5 + 4.9775 = 10053.0025 CAKE collected
-      // 10053.0025 * (1-0.20) * 0.5 = 4021.201 CAKE
+      // 10,000 + 47.525 + 0.5 + 4.9775 = 10053.0025 USDT collected
+      // 10053.0025 * (1-0.20) * 0.5 = 4021.201 USDT
 
       result = await lottery.claimTickets("1", ["110"], ["5"], { from: david });
 
       expectEvent(result, "TicketsClaim", {
         claimer: david,
-        amount: parseEther("4021.201").toString(),
+        amount: BigNumber.from("4212010000").toString(),
         lotteryId: "1",
         numberTickets: "1",
       });
 
       console.info(
-        `        --> Cost to claim ticket: ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to claim ticket: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
 
-      expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+      expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
         from: lottery.address,
         to: david,
-        value: parseEther("4021.201").toString(),
+        value: BigNumber.from("4212010000").toString(),
       });
 
       result = await lottery.viewNumbersAndStatusesForTicketIds(["110"]);
@@ -373,10 +377,10 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
     });
 
     it("Bob claims 10 winning tickets he bought", async () => {
-      // 10,000 + 47.525 + 0.5 + 4.9775 = 10053.0025 CAKE collected
-      // 10053.0025 * (1-0.20) * 0.02 = 160.84804 CAKE
-      // 10053.0025 * (1-0.20) * 0.03 = 241.27206 CAKE
-      // SUM (approximate) = 402.1201
+      // 10000 + 475.25 + 5 + 49.775 = 10530.025 USDT collected
+      // 10530.025 * (1-0.20) * 0.02 = 168.4804 USDT
+      // 10530.025 * (1-0.20) * 0.03 = 252.7206 USDT
+      // SUM (approximate) = 421.201
 
       result = await lottery.claimTickets(
         "1",
@@ -387,21 +391,21 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
       expectEvent(result, "TicketsClaim", {
         claimer: bob,
-        amount: parseEther("402.120099999999999996").toString(),
+        amount: BigNumber.from("421200996").toString(),
         lotteryId: "1",
         numberTickets: "10",
       });
 
       console.info(
-        `        --> Cost to claim 9 tickets: ${gasToBNB(result.receipt.gasUsed)} (USD: ${gasToUSD(
+        `        --> Cost to claim 9 tickets: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
           result.receipt.gasUsed
         )})`
       );
 
-      expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+      expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
         from: lottery.address,
         to: bob,
-        value: parseEther("402.120099999999999996").toString(),
+        value: BigNumber.from("421200996").toString(),
       });
 
       // 10053.0025 * (1- 0.2) - 402.1201 - 4021.201 = 3619.0809
@@ -454,7 +458,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         let endTimeTarget = new BN(await time.latest()).add(_lengthLottery).sub(new BN("10"));
 
         await expectRevert(
-          lottery.startLottery(endTimeTarget, _priceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(endTimeTarget, _priceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Lottery length outside of range"
@@ -465,7 +469,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         endTimeTarget = new BN(await time.latest()).add(_lengthLottery).add(new BN("100"));
 
         await expectRevert(
-          lottery.startLottery(endTimeTarget, _priceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(endTimeTarget, _priceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Lottery length outside of range"
@@ -483,7 +487,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         _discountDivisor = new BN(await lottery.MIN_DISCOUNT_DIVISOR()).sub(new BN("1"));
 
         await expectRevert(
-          lottery.startLottery(endTime, _priceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(endTime, _priceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Discount divisor too low"
@@ -498,7 +502,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         _treasuryFee = new BN(await lottery.MAX_TREASURY_FEE()).add(new BN("1"));
 
         await expectRevert(
-          lottery.startLottery(endTime, _priceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(endTime, _priceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Treasury fee too high"
@@ -509,19 +513,19 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
       });
 
       it("Operator cannot start lottery if ticket price too low or too high", async () => {
-        let newPriceTicketInCake = parseEther("0.0049999999");
+        let newPriceTicketInUSDT = BigNumber.from("4999999");
 
         await expectRevert(
-          lottery.startLottery(endTime, newPriceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(endTime, newPriceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Outside of limits"
         );
 
-        newPriceTicketInCake = parseEther("0.0049999999");
+        newPriceTicketInUSDT = BigNumber.from("50000001");
 
         await expectRevert(
-          lottery.startLottery(endTime, newPriceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(endTime, newPriceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Outside of limits"
@@ -534,7 +538,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         _rewardsBreakdown = ["0", "300", "500", "1500", "2500", "5000"]; // less than 10,000
 
         await expectRevert(
-          lottery.startLottery(endTime, _priceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(endTime, _priceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Rewards must equal 10000"
@@ -543,7 +547,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         _rewardsBreakdown = ["10000", "300", "500", "1500", "2500", "5000"]; // less than 10,000
 
         await expectRevert(
-          lottery.startLottery(endTime, _priceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(endTime, _priceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Rewards must equal 10000"
@@ -562,7 +566,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
         result = await lottery.startLottery(
           endTime,
-          _priceTicketInCake,
+          _priceTicketInUSDT,
           _discountDivisor,
           _rewardsBreakdown,
           _treasuryFee,
@@ -573,9 +577,9 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
           lotteryId: "2",
           startTime: (await time.latest()).toString(),
           endTime: endTime.toString(),
-          priceTicketInCake: _priceTicketInCake.toString(),
+          priceTicketInUSDT: _priceTicketInUSDT.toString(),
           firstTicketId: "111",
-          injectedAmount: parseEther("3619.0809").toString(),
+          injectedAmount: BigNumber.from("3790809000").toString(),
         });
       });
 
@@ -592,7 +596,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
       it("Operator cannot start a second lottery", async () => {
         await expectRevert(
-          lottery.startLottery(_lengthLottery, _priceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(_lengthLottery, _priceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: operator,
           }),
           "Not time to start lottery"
@@ -678,10 +682,10 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
           countWinningTickets: "0",
         });
 
-        expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+        expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
           from: lottery.address,
           to: treasury,
-          value: parseEther("3620.0804").toString(),
+          value: BigNumber.from("3800804000").toString(),
         });
       });
 
@@ -702,7 +706,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
         result = await lottery.startLottery(
           endTime,
-          _priceTicketInCake,
+          _priceTicketInUSDT,
           _discountDivisor,
           _rewardsBreakdown,
           _treasuryFee,
@@ -713,7 +717,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
           lotteryId: "3",
           startTime: (await time.latest()).toString(),
           endTime: endTime.toString(),
-          priceTicketInCake: _priceTicketInCake.toString(),
+          priceTicketInUSDT: _priceTicketInUSDT.toString(),
           firstTicketId: "113",
           injectedAmount: "0",
         });
@@ -750,7 +754,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
         result = await lottery.startLottery(
           endTime,
-          _priceTicketInCake,
+          _priceTicketInUSDT,
           _discountDivisor,
           newRewardsBreakdown,
           _treasuryFee,
@@ -761,22 +765,22 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
           lotteryId: "4",
           startTime: (await time.latest()).toString(),
           endTime: endTime.toString(),
-          priceTicketInCake: _priceTicketInCake.toString(),
+          priceTicketInUSDT: _priceTicketInUSDT.toString(),
           firstTicketId: "113",
           injectedAmount: "0",
         });
 
-        await lottery.injectFunds("4", parseEther("1000"), { from: injector });
+        await lottery.injectFunds("4", BigNumber.from("1000000000"), { from: injector });
 
         const _ticketsBought = ["1111118", "1222288", "1333888", "1448888", "1588888", "1888888"];
 
-        // Total cost: 2.9925 CAKE
+        // Total cost: 2.9925 USDT
         result = await lottery.buyTickets("4", _ticketsBought, { from: carol });
 
-        expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+        expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
           from: carol,
           to: lottery.address,
-          value: parseEther("2.9925").toString(),
+          value: BigNumber.from("29925000").toString(),
         });
       });
 
@@ -790,11 +794,11 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         // 6 winning tickets
         result = await lottery.drawFinalNumberAndMakeLotteryClaimable("4", true, { from: operator });
 
-        // 20% * 1002.9925 = 200.5985 CAKE
-        expectEvent.inTransaction(result.receipt.transactionHash, mockCake, "Transfer", {
+        // 20% * 1002.9925 = 200.5985 USDT
+        expectEvent.inTransaction(result.receipt.transactionHash, mockUSDT, "Transfer", {
           from: lottery.address,
           to: treasury,
-          value: parseEther("200.5985").toString(),
+          value: BigNumber.from("205985000").toString(),
         });
 
         expectEvent(result, "LotteryNumberDrawn", {
@@ -805,7 +809,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
       });
 
       it("User claims first ticket", async () => {
-        // 802.394 CAKE to collect
+        // 802.394 USDT to collect
         // Rewards: ["1000", "0", "1500", "2500", "0", "5000"];
         // 2 tickets with 1 matching --> 10% * 802.394 --> 80.2394 total --> 40.1197/ticket
         // 1 ticket with 3 matching --> 15% * 802.394 --> 120.3591 total --> 120.3591/ticket
@@ -816,7 +820,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
         expectEvent(result, "TicketsClaim", {
           claimer: carol,
-          amount: parseEther("40.1197").toString(),
+          amount: BigNumber.from("41197000").toString(),
           lotteryId: "4",
           numberTickets: "1",
         });
@@ -828,7 +832,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
         expectEvent(result, "TicketsClaim", {
           claimer: carol,
-          amount: parseEther("40.1197").toString(),
+          amount: BigNumber.from("41197000").toString(),
           lotteryId: "4",
           numberTickets: "1",
         });
@@ -839,7 +843,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
         expectEvent(result, "TicketsClaim", {
           claimer: carol,
-          amount: parseEther("521.5561").toString(), // 120.3591 + 401.197 = 521.5561
+          amount: BigNumber.from("535561000").toString(), // 120.3591 + 401.197 = 521.5561
           lotteryId: "4",
           numberTickets: "2",
         });
@@ -851,7 +855,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
         expectEvent(result, "TicketsClaim", {
           claimer: carol,
-          amount: parseEther("200.5985").toString(),
+          amount: BigNumber.from("205985000").toString(),
           lotteryId: "4",
           numberTickets: "2",
         });
@@ -859,7 +863,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
     });
 
     describe("Role exceptions", async () => {
-      it("Owner can recover funds only if not CAKE token", async () => {
+      it("Owner can recover funds only if not USDT token", async () => {
         // Deploy Random Token
         const randomToken = await MockERC20.new("Random Token", "RT", parseEther("100"), {
           from: alice,
@@ -873,14 +877,14 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         expectEvent(result, "AdminTokenRecovery", { token: randomToken.address, amount: parseEther("1").toString() });
 
         await expectRevert(
-          lottery.recoverWrongTokens(mockCake.address, parseEther("1"), { from: alice }),
-          "Cannot be CAKE token"
+          lottery.recoverWrongTokens(mockUSDT.address, parseEther("1"), { from: alice }),
+          "Cannot be USDT token"
         );
       });
 
       it("Only operator can call operator functions", async () => {
         await expectRevert(
-          lottery.startLottery(_lengthLottery, _priceTicketInCake, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
+          lottery.startLottery(_lengthLottery, _priceTicketInUSDT, _discountDivisor, _rewardsBreakdown, _treasuryFee, {
             from: alice,
           }),
           "Not operator"
@@ -904,7 +908,7 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         );
 
         await expectRevert(
-          lottery.recoverWrongTokens(mockCake.address, parseEther("10"), { from: operator }),
+          lottery.recoverWrongTokens(mockUSDT.address, parseEther("10"), { from: operator }),
           "Ownable: caller is not the owner"
         );
 

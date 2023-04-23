@@ -31,13 +31,7 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_seed",
-        "type": "uint256"
-      }
-    ],
+    "inputs": [],
     "name": "getRandomNumber",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -51,6 +45,19 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "lottery",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -72,19 +79,6 @@
   {
     "inputs": [],
     "name": "owner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "pancakeSwapLottery",
     "outputs": [
       {
         "internalType": "address",
@@ -119,7 +113,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "_pancakeSwapLottery",
+        "name": "_lottery",
         "type": "address"
       }
     ],

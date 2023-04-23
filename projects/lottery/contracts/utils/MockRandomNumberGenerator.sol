@@ -6,7 +6,7 @@ import "../interfaces/IRandomNumberGenerator.sol";
 import "../interfaces/IPancakeSwapLottery.sol";
 
 contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
-    address public pancakeSwapLottery;
+    address public lottery;
     uint32 public randomResult;
     uint256 public nextRandomResult;
     uint256 public latestLotteryId;
@@ -19,10 +19,10 @@ contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
 
     /**
      * @notice Set the address for the PancakeSwapLottery
-     * @param _pancakeSwapLottery: address of the PancakeSwap lottery
+     * @param _lottery: address of the PancakeSwap lottery
      */
-    function setLotteryAddress(address _pancakeSwapLottery) external onlyOwner {
-        pancakeSwapLottery = _pancakeSwapLottery;
+    function setLotteryAddress(address _lottery) external onlyOwner {
+        lottery = _lottery;
     }
 
     /**
@@ -35,18 +35,17 @@ contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
 
     /**
      * @notice Request randomness from a user-provided seed
-     * @param _seed: seed provided by the PancakeSwap lottery
      */
-    function getRandomNumber(uint256 _seed) external override {
-        require(msg.sender == pancakeSwapLottery, "Only PancakeSwapLottery");
-        fulfillRandomness(0, nextRandomResult);
+    function getRandomNumber() external override {
+        require(msg.sender == lottery, "Only Lottery contract");
+        randomizerCallback(0, nextRandomResult);
     }
 
     /**
      * @notice Change latest lotteryId to currentLotteryId
      */
     function changeLatestLotteryId() external {
-        latestLotteryId = IPancakeSwapLottery(pancakeSwapLottery).viewCurrentLotteryId();
+        latestLotteryId = IPancakeSwapLottery(lottery).viewCurrentLotteryId();
     }
 
     /**
@@ -63,10 +62,9 @@ contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
         return randomResult;
     }
 
-    /**
-     * @notice Callback function used by ChainLink's VRF Coordinator
-     */
-    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal {
-        randomResult = uint32(1000000 + (randomness % 1000000));
+    // Callback function called by the randomizer contract when the random value is generated
+    function randomizerCallback(uint256 _id, uint _value) internal {
+        //Callback can only be called by randomizer
+        randomResult = uint32(1000000 + (_value % 1000000));
     }
 }
