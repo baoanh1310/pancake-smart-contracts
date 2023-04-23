@@ -35,7 +35,7 @@ contract RandomNumberGenerator is IRandomNumberGenerator, Ownable {
         require(msg.sender == lottery, "Only Lottery Contract");
         // Request a random number from the randomizer contract (50k callback limit)
         latestRequestId = randomizer.request(50000);
-        // You can also do randomizer.request(50000, 20) to get a callback after 20 confirmations 
+        // You can also do randomizer.request(50000, 20) to get a callback after 20 confirmations
         // for increased finality security (you can do 1-40 confirmations).
     }
 
@@ -75,7 +75,7 @@ contract RandomNumberGenerator is IRandomNumberGenerator, Ownable {
     function randomizerCallback(uint256 _id, bytes32 _value) external {
         //Callback can only be called by randomizer
         require(msg.sender == address(randomizer), "Caller not Randomizer Protocol");
-        randomResult = uint32(1000000 + (uint(_value) % 1000000));
+        randomResult = uint32(1000000 + (uint256(_value) % 1000000));
         latestLotteryId = IPancakeSwapLottery(lottery).viewCurrentLotteryId();
     }
 }

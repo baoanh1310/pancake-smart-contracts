@@ -63,7 +63,7 @@ contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
     }
 
     // Callback function called by the randomizer contract when the random value is generated
-    function randomizerCallback(uint256 _id, uint _value) internal {
+    function randomizerCallback(uint256 _id, uint256 _value) internal {
         //Callback can only be called by randomizer
         randomResult = uint32(1000000 + (_value % 1000000));
     }

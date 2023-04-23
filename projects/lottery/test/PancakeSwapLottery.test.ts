@@ -35,7 +35,9 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
   let _treasuryFee = "2000";
 
   // Contracts
-  let lottery; let mockUSDT; let randomNumberGenerator;
+  let lottery;
+  let mockUSDT;
+  let randomNumberGenerator;
 
   // Generic variables
   let result: any;
@@ -271,7 +273,11 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
         "1999999",
       ];
 
-      const expectedPricePerBatch = await lottery.calculateTotalPriceForBulkTickets("2000", BigNumber.from("5000000"), "10");
+      const expectedPricePerBatch = await lottery.calculateTotalPriceForBulkTickets(
+        "2000",
+        BigNumber.from("5000000"),
+        "10"
+      );
 
       result = await lottery.buyTickets("1", _ticketsBought, { from: david });
       expectEvent(result, "TicketsPurchase", { buyer: david, lotteryId: "1", numberTickets: "10" });
@@ -293,7 +299,10 @@ contract("Lottery V2", ([alice, bob, carol, david, erin, operator, treasury, inj
 
     it("Owner does 10k USDT injection", async () => {
       result = await lottery.injectFunds("1", BigNumber.from("10000000000"), { from: alice });
-      expectEvent(result, "LotteryInjection", { lotteryId: "1", injectedAmount: BigNumber.from("10000000000").toString() });
+      expectEvent(result, "LotteryInjection", {
+        lotteryId: "1",
+        injectedAmount: BigNumber.from("10000000000").toString(),
+      });
 
       console.info(
         `        --> Cost to do injection: ${gasToETH(result.receipt.gasUsed)} (USD: ${gasToUSD(
